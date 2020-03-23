@@ -145,7 +145,7 @@ class Dictionary(list):
 
 
 class Brain(object):
-    def __init__(self, order=None, file=None, soft_timeout=None, hard_timeout=None):
+    def __init__(self, order=None, file=None, soft_timeout=None, hard_timeout=None, banwords=None):
         self.hard_timeout = hard_timeout or DEFAULT_HARD_TIMEOUT
         self.soft_timeout = soft_timeout or min(
             DEFAULT_SOFT_TIMEOUT, self.hard_timeout)
@@ -164,8 +164,9 @@ class Brain(object):
         self.dictionary = self.db.setdefault('dictionary', Dictionary())
         self.error_symbol = self.dictionary.add_word(ERROR_WORD)
         self.end_symbol = self.dictionary.add_word(END_WORD)
+        banwords = banwords or DEFAULT_BANWORDS
         self.banwords = self.db.setdefault(
-            'banwords', Dictionary(DEFAULT_BANWORDS))
+            'banwords', Dictionary(banwords))
         self.auxwords = self.db.setdefault(
             'auxwords', Dictionary(DEFAULT_AUXWORDS))
         self.swapwords = self.db.setdefault('swapwords', DEFAULT_SWAPWORDS)
