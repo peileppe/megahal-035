@@ -31,14 +31,16 @@ import os
 import random
 import re
 import shelve
+from copy import deepcopy
 from time import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-import Levenshtein
-from util import capitalize, split_list_to_sentences, strip_phrase
+from Levenshtein import ratio  # pylint: disable=no-name-in-module
+
+from .util import capitalize, split_list_to_sentences, strip_phrase
 
 if TYPE_CHECKING:
-    from typing import List
+    from typing import Dict, List, Optional, Union
 
 __version__ = '0.2'
 __author__ = 'Chris Jones <cjones@gruntle.org>'
@@ -103,20 +105,38 @@ DEFAULT_SWAPWORDS = {"YOU'RE": "I'M", "YOU'D": "I'D", 'HATE': 'LOVE', 'YOUR': 'M
                      "I'D": "YOU'D", "YOU'VE": "I'VE", 'YES': 'NO', 'MY': 'YOUR'}
 
 
+class Reply:
+    text: str
+    levenshtein: float
+    surprise: float
+
+    def __init__(self, text: str, levenshtein: float = 1.0, surprise: float = 0.0):
+        self.text = text
+        self.levenshtein = float(levenshtein)
+        self.surprise = float(surprise)
+
+    def __repr__(self):
+        return "<Reply: %s>" % self.text
+
+    def __str__(self):
+        return self.text
+
+
 class Tree(object):
-    def __init__(self, symbol=0):
+    def __init__(self, symbol: int = 0):
         self.symbol = symbol
         self.usage = 0
         self.count = 0
-        self.children = []
+        self.children: "List[Tree]" = []
 
-    def add_symbol(self, symbol):
-        node = self.get_child(symbol)
+    def add_symbol(self, symbol: int) -> "Tree":
+        node = cast("Tree", self.get_child(symbol))
         node.count += 1
         self.usage += 1
         return node
 
-    def get_child(self, symbol, add=True):
+    def get_child(self, symbol: int, add: bool = True) -> "Optional[Tree]":
+        child: "Optional[Tree]"
         for child in self.children:
             if child.symbol == symbol:
                 break
@@ -130,14 +150,14 @@ class Tree(object):
 
 
 class Dictionary(list):
-    def add_word(self, word):
+    def add_word(self, word: str) -> int:
         try:
             return self.index(word)
         except ValueError:
             self.append(word)
             return len(self) - 1
 
-    def find_word(self, word):
+    def find_word(self, word: str) -> int:
         try:
             return self.index(word)
         except ValueError:
@@ -145,11 +165,23 @@ class Dictionary(list):
 
 
 class Brain(object):
-    def __init__(self, order=None, file=None, soft_timeout=None, hard_timeout=None, banwords=None):
+    hard_timeout: "Union[float, int]"
+    soft_timeout: "Union[float, int]"
+
+    def __init__(
+            self, order: "Optional[int]" = None, file: "Optional[str]" = None,
+            soft_timeout: "Optional[int]" = None, hard_timeout: "Optional[int]" = None,
+            banwords: "Optional[List[str]]" = None):
         self.hard_timeout = hard_timeout or DEFAULT_HARD_TIMEOUT
-        self.soft_timeout = soft_timeout or min(
-            DEFAULT_SOFT_TIMEOUT, self.hard_timeout)
+        self.soft_timeout = soft_timeout or min(DEFAULT_SOFT_TIMEOUT, self.hard_timeout)
         self.db = shelve.open(file or DEFAULT_BRAINFILE, writeback=True)
+        self.init_db(order=order, banwords=banwords)
+        self.closed = False
+
+    def init_db(self, clear: bool = False, order: "Optional[int]" = None, banwords: "Optional[List[str]]" = None):
+        if clear:
+            banwords = banwords or deepcopy(self.db["banwords"])
+            self.db.clear()
         if self.db.setdefault('api', API_VERSION) != API_VERSION:
             raise ValueError(
                 'This brain has an incompatible api version: %d != %d'
@@ -157,33 +189,29 @@ class Brain(object):
             )
         order = order or DEFAULT_ORDER
         if self.db.setdefault('order', order) != order:
-            raise ValueError(
-                'This brain already has an order of %d' % self.db['order'])
+            raise ValueError('This brain already has an order of %d' % self.db['order'])
         self.forward = self.db.setdefault('forward', Tree())
         self.backward = self.db.setdefault('backward', Tree())
         self.dictionary = self.db.setdefault('dictionary', Dictionary())
         self.error_symbol = self.dictionary.add_word(ERROR_WORD)
         self.end_symbol = self.dictionary.add_word(END_WORD)
         banwords = banwords or DEFAULT_BANWORDS
-        self.banwords = self.db.setdefault(
-            'banwords', Dictionary(banwords))
-        self.auxwords = self.db.setdefault(
-            'auxwords', Dictionary(DEFAULT_AUXWORDS))
+        self.banwords = self.db.setdefault('banwords', Dictionary(banwords))
+        self.auxwords = self.db.setdefault('auxwords', Dictionary(DEFAULT_AUXWORDS))
         self.swapwords = self.db.setdefault('swapwords', DEFAULT_SWAPWORDS)
-        self.closed = False
 
     @property
-    def order(self):
+    def order(self) -> int:
         return self.db['order']
 
     @staticmethod
-    def get_words_from_phrase(phrase):
-        phrase = strip_phrase(phrase).upper()
+    def get_words_from_phrase(phrase: str) -> "List[str]":
+        phrase = phrase.upper()
         words = []
         if phrase:
             offset = 0
 
-            def boundary(string, position):
+            def boundary(string: str, position: int) -> bool:
                 if position == 0:
                     boundary = False
                 elif position == len(string):
@@ -210,31 +238,39 @@ class Brain(object):
                 return boundary
 
             while True:
-                if boundary(phrase, offset):
-                    word, phrase = phrase[:offset], phrase[offset:]
-                    words.append(word)
-                    if not phrase:
-                        break
-                    offset = 0
-                else:
-                    offset += 1
+                try:
+                    if boundary(phrase, offset):
+                        word, phrase = phrase[:offset], phrase[offset:]
+                        words.append(word)
+                        if not phrase:
+                            break
+                        offset = 0
+                    else:
+                        offset += 1
+                except Exception as e:
+                    print(phrase, offset)
+                    raise e
             if words[-1][0].isalnum():
                 words.append('.')
             elif words[-1][-1] not in '!.?':
                 words[-1] = '.'
         return words
 
-    def communicate(self, phrase, learn=True, reply=True, max_length=None):
+    def communicate(
+        self, phrase: str, learn: bool = True, reply: bool = True, max_length: "Optional[int]" = None,
+        timeout: "Union[float, int, None]" = None
+    ) -> "Optional[Reply]":
         words = self.get_words_from_phrase(phrase)
         if learn:
             self.learn(words)
         if reply:
-            return self.get_reply(words, max_length=max_length)
+            return self.get_reply(words, max_length=max_length, timeout=timeout)
+        return None
 
-    def get_context(self, tree):
+    def get_context(self, tree: "Tree"):
 
         class Context(dict):
-
+            # pylint: disable=no-self-argument
             def __enter__(context):
                 context.used_key = False
                 context[0] = tree
@@ -290,7 +326,7 @@ class Brain(object):
 
         return Context()
 
-    def learn(self, words):
+    def learn(self, words: "List[str]"):
         if len(words) > self.order:
             with self.get_context(self.forward) as context:
                 for word in words:
@@ -299,50 +335,67 @@ class Brain(object):
                 for word in reversed(words):
                     context.update(self.dictionary.index(word))
 
-    def get_reply(self, words, max_length=None):
-        output: "List[str]"
+    def get_reply(
+        self, words, max_length: "Optional[int]" = None, timeout: "Union[int, float, None]" = None
+    ) -> "Optional[Reply]":
+        replies = self.get_replies(words, max_length=max_length, timeout=timeout)
+        if replies:
+            return replies[0]
+        return None
+
+    def get_replies(
+        self, words: "List[str]", max_length: "Optional[int]" = None, timeout: "Union[int, float, None]" = None
+    ) -> "List[Reply]":
+        replies: "List[Reply]" = []
+        timeout = self.hard_timeout if timeout is None else float(timeout)
 
         def trim_reply(strings: "List[str]"):
             # Trim to max number of whole sentences to fit in max_length
+            assert isinstance(max_length, int)
             sentences = split_list_to_sentences(strings)
             for i in range(len(sentences), 0, -1):
-                if len("".join(["".join(s) for s in sentences[:i]]).strip()) <= max_length:
+                if max_length and len("".join(["".join(s) for s in sentences[:i]]).strip()) <= max_length:
                     return [w for s in sentences[:i] for w in s]
                 return []
 
         keywords = self.make_keywords(words)
-        if max_length is None:
+        basetime = time()
+        while time() - basetime < self.soft_timeout:
             dummy_reply = self.generate_replywords()
-        else:
-            basetime = time()
-            while time() - basetime < self.soft_timeout:
-                dummy_reply = trim_reply(self.generate_replywords())
-                if dummy_reply and Levenshtein.ratio("".join(words), "".join(dummy_reply)) < 0.7:
-                    break
-        if not dummy_reply:
-            output = []
-        else:
-            output = dummy_reply
+            if max_length:
+                dummy_reply = trim_reply(dummy_reply)
+            levenshtein = ratio("".join(words), "".join(dummy_reply)) if words else 0.0
+            surprise = self.evaluate_reply(keywords, dummy_reply) if words else 0.0
+            if dummy_reply and levenshtein < 0.7:
+                break
+        if dummy_reply:
+            replies.append(Reply(
+                capitalize(strip_phrase("".join(dummy_reply))),
+                levenshtein=levenshtein,
+                surprise=surprise
+            ))
         if words:
             # Only go through this trouble if we're actually responding to
             # something
-            max_surprise = -1.0
             basetime = time()
-            while time() - basetime < self.hard_timeout:
+            while time() - basetime < self.soft_timeout:
                 reply = self.generate_replywords(keywords)
                 if max_length:
                     reply = trim_reply(reply)
                 surprise = self.evaluate_reply(keywords, reply)
-                if reply and surprise > max_surprise and reply != keywords \
-                        and Levenshtein.ratio("".join(words), "".join(reply)) < 0.7:
-                    max_surprise = surprise
-                    output = reply
-        return capitalize(strip_phrase(''.join(output)))
+                reply_str = strip_phrase("".join(reply))
+                levenshtein = ratio("".join(words), reply_str)
+                if reply_str and levenshtein < 0.7:
+                    replies.append(Reply(
+                        capitalize(reply_str),
+                        levenshtein=levenshtein,
+                        surprise=surprise
+                    ))
+        return sorted(replies, key=lambda r: r.surprise, reverse=True)
 
-    def evaluate_reply(self, keys, words):
+    def evaluate_reply(self, keys: "List[str]", words: "List[str]") -> float:
         state = {'num': 0, 'entropy': 0.0}
         if words:
-
             def evaluate(node, words):
                 with self.get_context(node) as context:
                     for word in words:
@@ -371,10 +424,10 @@ class Brain(object):
                 state['entropy'] /= state['num']
         return state['entropy']
 
-    def generate_replywords(self, keys=None):
+    def generate_replywords(self, keys: "Optional[List[str]]" = None) -> "List[str]":
         if keys is None:
             keys = []
-        replies = []
+        replies: "List[str]" = []
         with self.get_context(self.forward) as context:
             start = True
             while True:
@@ -400,7 +453,7 @@ class Brain(object):
 
         return replies
 
-    def make_keywords(self, words):
+    def make_keywords(self, words: "List[str]") -> "Dictionary":
         keys = Dictionary()
         for word in words:
             try:
@@ -425,6 +478,7 @@ class Brain(object):
         return keys
 
     def add_key(self, keys, word):
+        # Never used?!
         if (len(word) > 1 and self.dictionary.find_word(word) != self.error_symbol and
             self.banwords.find_word(word) == self.error_symbol and
                 self.auxwords.find_word(word) == self.error_symbol):
@@ -447,25 +501,29 @@ class Brain(object):
 
 
 class MegaHAL(object):
-    def __init__(self, order=None, brainfile=None, timeout=None):
-        self.__brain = Brain(order, brainfile, hard_timeout=timeout)
+    def __init__(
+            self, order: "Optional[int]" = None, brainfile: "Optional[str]" = None,
+            timeout: "Optional[int]" = None, banwords: "Optional[List[str]]" = None,
+            max_length: "Optional[int]" = None):
+        self.max_length = max_length
+        self.__brain = Brain(order, brainfile, hard_timeout=timeout, banwords=banwords)
 
     @property
-    def banwords(self):
+    def banwords(self) -> "List[str]":
         """This is a list of words which cannot be used as keywords"""
         return self.__brain.banwords
 
     @property
-    def auxwords(self):
+    def auxwords(self) -> "List[str]":
         """This is a list of words which can be used as keywords only in order to supplement other keywords"""
         return self.__brain.auxwords
 
     @property
-    def swapwords(self):
+    def swapwords(self) -> "Dict[str, str]":
         """The word on the left is changed to the word on the right when used as a keyword"""
         return self.__brain.swapwords
 
-    def train(self, file):
+    def train(self, file: str):
         """Train the brain with textfile, each line is a phrase"""
         line_count = 0
         percent = 0
@@ -496,27 +554,28 @@ class MegaHAL(object):
                     self.learn(line)
                 line_number += 1
 
-    def learn(self, phrase):
+    def learn(self, phrase: str):
         """Learn from phrase"""
         self.__brain.communicate(phrase, reply=False)
 
-    def get_reply(self, phrase):
+    def get_reply(self, phrase: str, max_length=None, timeout=None) -> "Optional[Reply]":
         """Get a reply based on the phrase"""
-        return self.__brain.communicate(phrase)
+        return self.__brain.communicate(phrase, max_length=max_length or self.max_length, timeout=timeout)
 
-    def get_reply_nolearn(self, phrase):
+    def get_reply_nolearn(self, phrase: str, max_length=None, timeout=None) -> "Optional[Reply]":
         """Get a reply without updating the database"""
-        return self.__brain.communicate(phrase, learn=False)
+        return self.__brain.communicate(phrase, learn=False, max_length=max_length or self.max_length, timeout=timeout)
 
-    def interact(self):
+    def interact(self, timeout=None):
         """Have a friendly chat session.. ^D to exit"""
+        print("Go ahead and chat! ^D to exit.")
         while True:
             try:
                 phrase = input('>>> ')
             except EOFError:
                 break
             if phrase:
-                print(self.get_reply(phrase))
+                print(self.get_reply(phrase, timeout=timeout or 2))
 
     def sync(self):
         """Flush any changes to disk"""
@@ -525,3 +584,6 @@ class MegaHAL(object):
     def close(self):
         """Close database"""
         self.__brain.close()
+
+    def clear(self):
+        self.__brain.init_db(clear=True)
