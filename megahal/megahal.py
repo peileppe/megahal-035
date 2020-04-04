@@ -36,8 +36,7 @@ from time import time
 from typing import TYPE_CHECKING, cast
 
 from Levenshtein import ratio  # pylint: disable=no-name-in-module
-
-from .util import capitalize, split_list_to_sentences, strip_phrase
+from megahal.util import capitalize, split_list_to_sentences, strip_phrase
 
 if TYPE_CHECKING:
     from typing import Dict, List, Optional, Union
