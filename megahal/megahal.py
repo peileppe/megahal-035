@@ -501,11 +501,35 @@ class Brain(object):
 
 class MegaHAL(object):
     def __init__(
-            self, order: "Optional[int]" = None, brainfile: "Optional[str]" = None,
-            timeout: "Optional[int]" = None, banwords: "Optional[List[str]]" = None,
+            self,
+            order: "Optional[int]" = None,
+            brainfile: "Optional[str]" = None,
+            timeout: "Optional[int]" = None,
+            banwords: "Optional[List[str]]" = None,
+            banwordfile: "Optional[str]" = None,
             max_length: "Optional[int]" = None):
+        """
+        Args:
+            banwords (list of str, optional): List of common words (in
+                that MegaHAL should ignore when learning and replying.
+                Defaults to DEFAULT_BANWORDS. Pro tip: do a web search for the
+                most commonly used words in your language and use the top ~300
+                of those.
+        """
         self.max_length = max_length
+        if banwordfile and not banwords:
+            banwords = []
+            with open(banwordfile, "r") as f:
+                for line in f:
+                    banwords.extend([w.strip().upper() for w in line.split(",")])
+        elif banwords:
+            banwords = [w.upper() for w in banwords]
         self.__brain = Brain(order, brainfile, hard_timeout=timeout, banwords=banwords)
+
+    @property
+    def brainsize(self) -> int:
+        """Subtract by 2 because dictionary contains <ERROR> & <FIN> symbols"""
+        return len(self.__brain.dictionary) - 2
 
     @property
     def banwords(self) -> "List[str]":

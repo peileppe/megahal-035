@@ -5,3 +5,4 @@
 *.egg-info
 *.egg
 **/.vscode
+**/.mypy_cache
