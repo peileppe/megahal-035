@@ -17,7 +17,7 @@ setuptools.setup(
     version='0.3',
     py_modules=['megahal'],
     scripts=['scripts/megahal'],
-    install_requires=["python-Levenshtein", "emoji"],
+    install_requires=["python-Levenshtein"],
     python_requires=">=3.6",
     include_package_data=True,
     packages=["megahal"],

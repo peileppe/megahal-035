@@ -36,7 +36,7 @@ from time import time
 from typing import TYPE_CHECKING, cast
 
 from Levenshtein import ratio  # pylint: disable=no-name-in-module
-from megahal.util import capitalize, split_list_to_sentences, strip_phrase
+from megahal.util import capitalize, split_list_to_sentences
 
 if TYPE_CHECKING:
     from typing import Dict, List, Optional, Union
@@ -363,13 +363,14 @@ class Brain(object):
             dummy_reply = self.generate_replywords()
             if max_length:
                 dummy_reply = trim_reply(dummy_reply)
-            levenshtein = ratio("".join(words), "".join(dummy_reply)) if words else 0.0
+            reply_str = capitalize("".join(dummy_reply))
+            levenshtein = ratio("".join(words), reply_str) if words else 0.0
             surprise = self.evaluate_reply(keywords, dummy_reply) if words else 0.0
             if dummy_reply and levenshtein < 0.7:
                 break
         if dummy_reply:
             replies.append(Reply(
-                capitalize(strip_phrase("".join(dummy_reply))),
+                reply_str,
                 levenshtein=levenshtein,
                 surprise=surprise
             ))
@@ -382,11 +383,11 @@ class Brain(object):
                 if max_length:
                     reply = trim_reply(reply)
                 surprise = self.evaluate_reply(keywords, reply)
-                reply_str = strip_phrase("".join(reply))
+                reply_str = capitalize("".join(reply))
                 levenshtein = ratio("".join(words), reply_str)
                 if reply_str and levenshtein < 0.7:
                     replies.append(Reply(
-                        capitalize(reply_str),
+                        reply_str,
                         levenshtein=levenshtein,
                         surprise=surprise
                     ))
