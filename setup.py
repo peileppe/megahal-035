@@ -11,15 +11,14 @@ setuptools.setup(
     name='megahal',
     author='Chris Jones, Robert Huselius',
     author_email='robert@huseli.us',
-    url='http://gruntle.org/projects/python/megahal/',
+    url='https://github.com/Eboreg/megahal',
     description='Python implementation of megahal markov bot (fork)',
     license='BSD',
-    version='0.3',
+    version='0.3.1',
     py_modules=['megahal'],
     scripts=['scripts/megahal'],
     install_requires=["python-Levenshtein"],
     python_requires=">=3.6",
-    include_package_data=True,
     packages=["megahal"],
 
     # http://pypi.python.org/pypi?%3Aaction=list_classifiers

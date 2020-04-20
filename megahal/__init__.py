@@ -1,6 +1,6 @@
 from megahal.megahal import (
-    DEFAULT_BRAINFILE, DEFAULT_HARD_TIMEOUT, DEFAULT_ORDER, DEFAULT_BANWORDS,
-    DEFAULT_SOFT_TIMEOUT, Dictionary, MegaHAL, Tree, __version__, Brain
+    DEFAULT_BANWORDS, DEFAULT_BRAINFILE, DEFAULT_HARD_TIMEOUT, DEFAULT_ORDER,
+    DEFAULT_SOFT_TIMEOUT, Brain, Dictionary, MegaHAL, Tree, __version__,
 )
 
 __all__ = [
