@@ -14,7 +14,7 @@ setuptools.setup(
     url='https://github.com/Eboreg/megahal',
     description='Python implementation of megahal markov bot (fork)',
     license='BSD',
-    version='0.3.1',
+    version='0.3.2',
     py_modules=['megahal'],
     scripts=['scripts/megahal'],
     install_requires=["python-Levenshtein"],
