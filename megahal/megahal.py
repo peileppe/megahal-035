@@ -139,7 +139,7 @@ class Tree(object):
         self.usage += 1
         return node
 
-    def get_child(self, symbol, add):
+    def get_child(self, symbol, add=True):
         child: "Optional[Tree]"
         for child in self.children:
             if child.symbol == symbol:
