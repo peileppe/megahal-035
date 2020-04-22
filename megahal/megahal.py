@@ -39,9 +39,9 @@ from Levenshtein import ratio  # pylint: disable=no-name-in-module
 from megahal.util import capitalize, split_list_to_sentences
 
 if TYPE_CHECKING:
-    from typing import Dict, List, Optional, Union
+    from typing import List, Optional
 
-__version__ = '0.3.1'
+__version__ = '0.3.2'
 __author__ = 'Chris Jones <cjones@gruntle.org>, Robert Huselius'
 __license__ = 'BSD'
 __all__ = [
@@ -53,7 +53,7 @@ DEFAULT_ORDER = 5
 DEFAULT_BRAINFILE = os.path.join(
     os.environ.get('HOME', ''), '.pymegahal-brain')
 DEFAULT_SOFT_TIMEOUT = 5.0
-DEFAULT_HARD_TIMEOUT = 30.0
+DEFAULT_HARD_TIMEOUT = 20.0
 
 API_VERSION = '1.0'
 END_WORD = '<FIN>'
@@ -105,14 +105,19 @@ DEFAULT_SWAPWORDS = {"YOU'RE": "I'M", "YOU'D": "I'D", 'HATE': 'LOVE', 'YOUR': 'M
 
 
 class Reply:
-    text: str
-    levenshtein: float
-    surprise: float
-
-    def __init__(self, text: str, levenshtein: float = 1.0, surprise: float = 0.0):
+    def __init__(self, text, levenshtein=0.0, surprise=0.0):
         self.text = text
         self.levenshtein = float(levenshtein)
         self.surprise = float(surprise)
+        # Rating will probably need some playing around with
+        if self.surprise and self.levenshtein:
+            self.rating = self.surprise / (self.levenshtein * 10)
+        elif self.surprise:
+            self.rating = self.surprise
+        elif self.levenshtein:
+            self.rating = 1 / self.levenshtein
+        else:
+            self.rating = 0.0
 
     def __repr__(self):
         return "<Reply: %s>" % self.text
@@ -122,19 +127,19 @@ class Reply:
 
 
 class Tree(object):
-    def __init__(self, symbol: int = 0):
+    def __init__(self, symbol=0):
         self.symbol = symbol
         self.usage = 0
         self.count = 0
-        self.children: "List[Tree]" = []
+        self.children = []
 
-    def add_symbol(self, symbol: int) -> "Tree":
+    def add_symbol(self, symbol):
         node = cast("Tree", self.get_child(symbol))
         node.count += 1
         self.usage += 1
         return node
 
-    def get_child(self, symbol: int, add: bool = True) -> "Optional[Tree]":
+    def get_child(self, symbol, add):
         child: "Optional[Tree]"
         for child in self.children:
             if child.symbol == symbol:
@@ -149,14 +154,14 @@ class Tree(object):
 
 
 class Dictionary(list):
-    def add_word(self, word: str) -> int:
+    def add_word(self, word):
         try:
             return self.index(word)
         except ValueError:
             self.append(word)
             return len(self) - 1
 
-    def find_word(self, word: str) -> int:
+    def find_word(self, word):
         try:
             return self.index(word)
         except ValueError:
@@ -164,20 +169,14 @@ class Dictionary(list):
 
 
 class Brain(object):
-    hard_timeout: "Union[float, int]"
-    soft_timeout: "Union[float, int]"
-
-    def __init__(
-            self, order: "Optional[int]" = None, file: "Optional[str]" = None,
-            soft_timeout: "Optional[int]" = None, hard_timeout: "Optional[int]" = None,
-            banwords: "Optional[List[str]]" = None):
+    def __init__(self, order=None, file=None, soft_timeout=None, hard_timeout=None, banwords=None):
         self.hard_timeout = hard_timeout or DEFAULT_HARD_TIMEOUT
         self.soft_timeout = soft_timeout or min(DEFAULT_SOFT_TIMEOUT, self.hard_timeout)
         self.db = shelve.open(file or DEFAULT_BRAINFILE, writeback=True)
         self.init_db(order=order, banwords=banwords)
         self.closed = False
 
-    def init_db(self, clear: bool = False, order: "Optional[int]" = None, banwords: "Optional[List[str]]" = None):
+    def init_db(self, clear=False, order=None, banwords=None):
         if clear:
             banwords = banwords or deepcopy(self.db["banwords"])
             self.db.clear()
@@ -204,7 +203,7 @@ class Brain(object):
         return self.db['order']
 
     @staticmethod
-    def get_words_from_phrase(phrase: str) -> "List[str]":
+    def get_words_from_phrase(phrase):
         phrase = phrase.upper()
         words = []
         if phrase:
@@ -255,10 +254,7 @@ class Brain(object):
                 words[-1] = '.'
         return words
 
-    def communicate(
-        self, phrase: str, learn: bool = True, reply: bool = True, max_length: "Optional[int]" = None,
-        timeout: "Union[float, int, None]" = None
-    ) -> "Optional[Reply]":
+    def communicate(self, phrase, learn=True, reply=True, max_length=None, timeout=None):
         words = self.get_words_from_phrase(phrase)
         if learn:
             self.learn(words)
@@ -266,7 +262,7 @@ class Brain(object):
             return self.get_reply(words, max_length=max_length, timeout=timeout)
         return None
 
-    def get_context(self, tree: "Tree"):
+    def get_context(self, tree):
 
         class Context(dict):
             # pylint: disable=no-self-argument
@@ -325,7 +321,7 @@ class Brain(object):
 
         return Context()
 
-    def learn(self, words: "List[str]"):
+    def learn(self, words):
         if len(words) > self.order:
             with self.get_context(self.forward) as context:
                 for word in words:
@@ -334,19 +330,16 @@ class Brain(object):
                 for word in reversed(words):
                     context.update(self.dictionary.index(word))
 
-    def get_reply(
-        self, words, max_length: "Optional[int]" = None, timeout: "Union[int, float, None]" = None
-    ) -> "Optional[Reply]":
+    def get_reply(self, words, max_length=None, timeout=None):
         replies = self.get_replies(words, max_length=max_length, timeout=timeout)
         if replies:
             return replies[0]
         return None
 
-    def get_replies(
-        self, words: "List[str]", max_length: "Optional[int]" = None, timeout: "Union[int, float, None]" = None
-    ) -> "List[Reply]":
+    def get_replies(self, words, max_length=None, timeout=None):
         replies: "List[Reply]" = []
         timeout = self.hard_timeout if timeout is None else float(timeout)
+        dummy_reply = None
 
         def trim_reply(strings: "List[str]"):
             # Trim to max number of whole sentences to fit in max_length
@@ -360,25 +353,25 @@ class Brain(object):
         keywords = self.make_keywords(words)
         basetime = time()
         while time() - basetime < self.soft_timeout:
-            dummy_reply = self.generate_replywords()
+            dummy = self.generate_replywords()
             if max_length:
-                dummy_reply = trim_reply(dummy_reply)
-            reply_str = capitalize("".join(dummy_reply))
+                dummy = trim_reply(dummy)
+            reply_str = capitalize("".join(dummy))
             levenshtein = ratio("".join(words), reply_str) if words else 0.0
-            surprise = self.evaluate_reply(keywords, dummy_reply) if words else 0.0
-            if dummy_reply and levenshtein < 0.7:
+            surprise = self.evaluate_reply(keywords, dummy) if words else 0.0
+            if dummy and levenshtein < 0.7:
                 break
-        if dummy_reply:
-            replies.append(Reply(
+        if dummy:
+            dummy_reply = Reply(
                 reply_str,
                 levenshtein=levenshtein,
                 surprise=surprise
-            ))
+            )
         if words:
             # Only go through this trouble if we're actually responding to
             # something
             basetime = time()
-            while time() - basetime < self.soft_timeout:
+            while time() - basetime < self.hard_timeout:
                 reply = self.generate_replywords(keywords)
                 if max_length:
                     reply = trim_reply(reply)
@@ -391,9 +384,13 @@ class Brain(object):
                         levenshtein=levenshtein,
                         surprise=surprise
                     ))
-        return sorted(replies, key=lambda r: r.surprise, reverse=True)
+        if replies:
+            return sorted(replies, key=lambda r: r.rating, reverse=True)
+        elif dummy_reply:
+            return [dummy_reply]
+        return []
 
-    def evaluate_reply(self, keys: "List[str]", words: "List[str]") -> float:
+    def evaluate_reply(self, keys, words):
         state = {'num': 0, 'entropy': 0.0}
         if words:
             def evaluate(node, words):
@@ -424,7 +421,7 @@ class Brain(object):
                 state['entropy'] /= state['num']
         return state['entropy']
 
-    def generate_replywords(self, keys: "Optional[List[str]]" = None) -> "List[str]":
+    def generate_replywords(self, keys=None):
         if keys is None:
             keys = []
         replies: "List[str]" = []
@@ -453,7 +450,7 @@ class Brain(object):
 
         return replies
 
-    def make_keywords(self, words: "List[str]") -> "Dictionary":
+    def make_keywords(self, words):
         keys = Dictionary()
         for word in words:
             try:
@@ -501,14 +498,7 @@ class Brain(object):
 
 
 class MegaHAL(object):
-    def __init__(
-            self,
-            order: "Optional[int]" = None,
-            brainfile: "Optional[str]" = None,
-            timeout: "Optional[int]" = None,
-            banwords: "Optional[List[str]]" = None,
-            banwordfile: "Optional[str]" = None,
-            max_length: "Optional[int]" = None):
+    def __init__(self, order=None, brainfile=None, timeout=None, banwords=None, banwordfile=None, max_length=None):
         """
         Args:
             banwords (list of str, optional): List of common words (in
@@ -528,26 +518,26 @@ class MegaHAL(object):
         self.__brain = Brain(order, brainfile, hard_timeout=timeout, banwords=banwords)
 
     @property
-    def brainsize(self) -> int:
+    def brainsize(self):
         """Subtract by 2 because dictionary contains <ERROR> & <FIN> symbols"""
         return len(self.__brain.dictionary) - 2
 
     @property
-    def banwords(self) -> "List[str]":
+    def banwords(self):
         """This is a list of words which cannot be used as keywords"""
         return self.__brain.banwords
 
     @property
-    def auxwords(self) -> "List[str]":
+    def auxwords(self):
         """This is a list of words which can be used as keywords only in order to supplement other keywords"""
         return self.__brain.auxwords
 
     @property
-    def swapwords(self) -> "Dict[str, str]":
+    def swapwords(self):
         """The word on the left is changed to the word on the right when used as a keyword"""
         return self.__brain.swapwords
 
-    def train(self, file: str):
+    def train(self, file):
         """Train the brain with textfile, each line is a phrase"""
         line_count = 0
         percent = 0
@@ -578,15 +568,15 @@ class MegaHAL(object):
                     self.learn(line)
                 line_number += 1
 
-    def learn(self, phrase: str):
+    def learn(self, phrase):
         """Learn from phrase"""
         self.__brain.communicate(phrase, reply=False)
 
-    def get_reply(self, phrase: str, max_length=None, timeout=None) -> "Optional[Reply]":
+    def get_reply(self, phrase, max_length=None, timeout=None):
         """Get a reply based on the phrase"""
         return self.__brain.communicate(phrase, max_length=max_length or self.max_length, timeout=timeout)
 
-    def get_reply_nolearn(self, phrase: str, max_length=None, timeout=None) -> "Optional[Reply]":
+    def get_reply_nolearn(self, phrase, max_length=None, timeout=None):
         """Get a reply without updating the database"""
         return self.__brain.communicate(phrase, learn=False, max_length=max_length or self.max_length, timeout=timeout)
 
