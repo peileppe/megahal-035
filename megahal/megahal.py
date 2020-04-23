@@ -111,7 +111,7 @@ class Reply:
         self.surprise = float(surprise)
         # Rating will probably need some playing around with
         if self.surprise and self.levenshtein:
-            self.rating = self.surprise / (self.levenshtein * 10)
+            self.rating = self.surprise / (self.levenshtein * 10) + self.surprise
         elif self.surprise:
             self.rating = self.surprise
         elif self.levenshtein:
