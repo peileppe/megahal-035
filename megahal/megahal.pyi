@@ -2,16 +2,15 @@ from typing import TYPE_CHECKING, cast
 from typing import Dict, List, Optional, Union
 
 
-DEFAULT_ORDER: int
-DEFAULT_BRAINFILE: str
-DEFAULT_SOFT_TIMEOUT: float
-DEFAULT_HARD_TIMEOUT: float
 API_VERSION: str
+DEFAULT_AUXWORDS: List[str]
+DEFAULT_BANWORDS: List[str]
+DEFAULT_BRAINFILE: str
+DEFAULT_ORDER: int
+DEFAULT_SWAPWORDS: List[str]
+DEFAULT_TIMEOUT: float
 END_WORD: str
 ERROR_WORD: str
-DEFAULT_BANWORDS: List[str]
-DEFAULT_AUXWORDS: List[str]
-DEFAULT_SWAPWORDS: List[str]
 
 
 class Reply:
@@ -36,9 +35,8 @@ class Dictionary(list):
 
 
 class Brain:
-    hard_timeout: Union[float, int]
-    soft_timeout: Union[float, int]
-    def __init__(self, order: Optional[int], file: Optional[str], soft_timeout: Optional[int], hard_timeout: Optional[int], banwords: Optional[List[str]]): ...
+    timeout: Union[float, int]
+    def __init__(self, order: Optional[int], file: Optional[str], timeout: Union[int, float, None], banwords: Optional[List[str]]): ...
     def init_db(self, clear: bool, order: Optional[int], banwords: Optional[List[str]]): ...
     @property
     def order(self) -> int: ...

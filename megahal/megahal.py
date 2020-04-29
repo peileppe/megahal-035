@@ -41,19 +41,18 @@ from megahal.util import capitalize, split_list_to_sentences
 if TYPE_CHECKING:
     from typing import List, Optional
 
-__version__ = '0.3.2'
+__version__ = '0.3.4'
 __author__ = 'Chris Jones <cjones@gruntle.org>, Robert Huselius'
 __license__ = 'BSD'
 __all__ = [
     'MegaHAL', 'Dictionary', 'Tree', '__version__', 'DEFAULT_ORDER',
-    'DEFAULT_BRAINFILE', 'DEFAULT_HARD_TIMEOUT', 'DEFAULT_SOFT_TIMEOUT'
+    'DEFAULT_BRAINFILE', 'DEFAULT_TIMEOUT'
 ]
 
 DEFAULT_ORDER = 5
 DEFAULT_BRAINFILE = os.path.join(
     os.environ.get('HOME', ''), '.pymegahal-brain')
-DEFAULT_SOFT_TIMEOUT = 5.0
-DEFAULT_HARD_TIMEOUT = 20.0
+DEFAULT_TIMEOUT = 25.0
 
 API_VERSION = '1.0'
 END_WORD = '<FIN>'
@@ -169,9 +168,8 @@ class Dictionary(list):
 
 
 class Brain(object):
-    def __init__(self, order=None, file=None, soft_timeout=None, hard_timeout=None, banwords=None):
-        self.hard_timeout = hard_timeout or DEFAULT_HARD_TIMEOUT
-        self.soft_timeout = soft_timeout or min(DEFAULT_SOFT_TIMEOUT, self.hard_timeout)
+    def __init__(self, order=None, file=None, timeout=None, banwords=None):
+        self.timeout = timeout or DEFAULT_TIMEOUT
         self.db = shelve.open(file or DEFAULT_BRAINFILE, writeback=True)
         self.init_db(order=order, banwords=banwords)
         self.closed = False
@@ -338,7 +336,15 @@ class Brain(object):
 
     def get_replies(self, words, max_length=None, timeout=None):
         replies: "List[Reply]" = []
-        timeout = self.hard_timeout if timeout is None else float(timeout)
+        timeout = self.timeout if timeout is None else float(timeout)
+        if words:
+            # timeout[0] is for generating dummy reply, timeout[1] for
+            # generating proper reply.
+            timeouts = (timeout * 0.2, timeout * 0.8)
+        else:
+            # If there is nothing to reply to, only dummy reply will be
+            # generated.
+            timeouts = (timeout, 0.0)
         dummy_reply = None
 
         def trim_reply(strings: "List[str]"):
@@ -352,7 +358,7 @@ class Brain(object):
 
         keywords = self.make_keywords(words)
         basetime = time()
-        while time() - basetime < self.soft_timeout:
+        while time() - basetime < timeouts[0]:
             dummy = self.generate_replywords()
             if max_length:
                 dummy = trim_reply(dummy)
@@ -371,7 +377,7 @@ class Brain(object):
             # Only go through this trouble if we're actually responding to
             # something
             basetime = time()
-            while time() - basetime < self.hard_timeout:
+            while time() - basetime < timeouts[1]:
                 reply = self.generate_replywords(keywords)
                 if max_length:
                     reply = trim_reply(reply)
@@ -515,7 +521,7 @@ class MegaHAL(object):
                     banwords.extend([w.strip().upper() for w in line.split(",")])
         elif banwords:
             banwords = [w.upper() for w in banwords]
-        self.__brain = Brain(order, brainfile, hard_timeout=timeout, banwords=banwords)
+        self.__brain = Brain(order, brainfile, timeout=timeout, banwords=banwords)
 
     @property
     def brainsize(self):
