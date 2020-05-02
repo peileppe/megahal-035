@@ -362,14 +362,14 @@ class Brain(object):
             dummy = self.generate_replywords()
             if max_length:
                 dummy = trim_reply(dummy)
-            reply_str = capitalize("".join(dummy))
+            reply_str = "".join(dummy)
             levenshtein = ratio("".join(words), reply_str) if words else 0.0
             surprise = self.evaluate_reply(keywords, dummy) if words else 0.0
             if dummy and levenshtein < 0.7:
                 break
         if dummy:
             dummy_reply = Reply(
-                reply_str,
+                capitalize(reply_str),
                 levenshtein=levenshtein,
                 surprise=surprise
             )
@@ -382,11 +382,11 @@ class Brain(object):
                 if max_length:
                     reply = trim_reply(reply)
                 surprise = self.evaluate_reply(keywords, reply)
-                reply_str = capitalize("".join(reply))
+                reply_str = "".join(reply)
                 levenshtein = ratio("".join(words), reply_str)
                 if reply_str and levenshtein < 0.7:
                     replies.append(Reply(
-                        reply_str,
+                        capitalize(reply_str),
                         levenshtein=levenshtein,
                         surprise=surprise
                     ))
