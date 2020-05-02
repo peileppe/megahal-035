@@ -41,7 +41,7 @@ from megahal.util import capitalize, split_list_to_sentences
 if TYPE_CHECKING:
     from typing import List, Optional
 
-__version__ = '0.3.4'
+__version__ = '0.3.5'
 __author__ = 'Chris Jones <cjones@gruntle.org>, Robert Huselius'
 __license__ = 'BSD'
 __all__ = [
