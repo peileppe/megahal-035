@@ -3,16 +3,11 @@
 import sys
 from optparse import OptionParser
 
-from megahal import (
-    DEFAULT_BRAINFILE, DEFAULT_TIMEOUT, DEFAULT_ORDER, MegaHAL,
-    __version__,
-)
+from megahal import DEFAULT_ORDER, DEFAULT_TIMEOUT, MegaHAL, __version__
 
 
 def main(argv=None):
     optparse = OptionParser(version=__version__, description=__doc__)
-    optparse.add_option('-b', '--brain', dest='brainfile', metavar='<file>', default=DEFAULT_BRAINFILE,
-                        help='location of brain (default: %default)')
     optparse.add_option('-o', '--order', metavar='<int>', default=DEFAULT_ORDER, type='int',
                         help='order of markov chain (default: %default)')
     optparse.add_option('-t', '--timeout', metavar='<float>', default=DEFAULT_TIMEOUT, type='float',
@@ -20,7 +15,7 @@ def main(argv=None):
     optparse.add_option('-T', '--train', metavar='<file>', help='train brain with file')
     opts, args = optparse.parse_args(argv)
 
-    megahal = MegaHAL(brainfile=opts.brainfile, order=opts.order, timeout=opts.timeout)
+    megahal = MegaHAL(order=opts.order, timeout=opts.timeout)
     if opts.train:
         megahal.train(opts.train)
     megahal.interact()

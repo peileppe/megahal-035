@@ -1,13 +1,9 @@
 from megahal.megahal import (
-    DEFAULT_BANWORDS, DEFAULT_BRAINFILE, DEFAULT_ORDER, DEFAULT_TIMEOUT,
-    Brain, Dictionary, MegaHAL, Tree,
+    DEFAULT_BANWORDS, DEFAULT_ORDER, DEFAULT_TIMEOUT, Brain, Dictionary,
+    MegaHAL, Tree,
 )
 
-
-__version__ = "0.3.5"
+__version__ = "0.4.0"
 VERSION = tuple(map(int, __version__.split(".")))
 
-__all__ = [
-    "MegaHAL", "Dictionary", "Tree", "__version__", "DEFAULT_ORDER", "Brain",
-    "DEFAULT_BRAINFILE", "DEFAULT_BANWORDS", "DEFAULT_TIMEOUT",
-]
+__all__ = ["Brain", "DEFAULT_BANWORDS", "DEFAULT_ORDER", "DEFAULT_TIMEOUT", "Dictionary", "MegaHAL", "Tree"]

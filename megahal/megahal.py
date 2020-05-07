@@ -27,79 +27,85 @@
 """Python implementation of megahal markov bot"""
 
 import math
-import os
 import random
 import re
-import shelve
-from copy import deepcopy
 from time import time
 from typing import TYPE_CHECKING, cast
 
 from Levenshtein import ratio  # pylint: disable=no-name-in-module
 from megahal.util import capitalize, split_list_to_sentences
 
+# from typed_keyvalue_db import RedisDatabase
+
 if TYPE_CHECKING:
     from typing import List, Optional
 
-__author__ = 'Chris Jones <cjones@gruntle.org>, Robert Huselius'
-__license__ = 'BSD'
-__all__ = [
-    'MegaHAL', 'Dictionary', 'Tree', 'DEFAULT_ORDER',
-    'DEFAULT_BRAINFILE', 'DEFAULT_TIMEOUT'
-]
+__author__ = "Chris Jones <cjones@gruntle.org>, Robert Huselius"
+__license__ = "BSD"
+# __all__ = ["Brain", "DEFAULT_BANWORDS", "DEFAULT_ORDER", "DEFAULT_TIMEOUT", "Dictionary", "MegaHAL", "Tree"]
 
 DEFAULT_ORDER = 5
-DEFAULT_BRAINFILE = os.path.join(
-    os.environ.get('HOME', ''), '.pymegahal-brain')
 DEFAULT_TIMEOUT = 25.0
 
-API_VERSION = '1.0'
-END_WORD = '<FIN>'
-ERROR_WORD = '<ERROR>'
+API_VERSION = "1.0"
+END_WORD = "<FIN>"
+ERROR_WORD = "<ERROR>"
 
-DEFAULT_BANWORDS = ['A', 'ABILITY', 'ABLE', 'ABOUT', 'ABSOLUTE', 'ABSOLUTELY', 'ACROSS', 'ACTUAL', 'ACTUALLY', 'AFTER',
-                    'AGAIN', 'AGAINST', 'AGO', 'AGREE', 'ALL', 'ALMOST', 'ALONG', 'ALREADY', 'ALTHOUGH', 'ALWAYS',
-                    'AN', 'AND', 'ANOTHER', 'ANY', 'ANYHOW', 'ANYTHING', 'ANYWAY', 'ARE', "AREN'T", 'AROUND', 'AS',
-                    'AWAY', 'BACK', 'BAD', 'BE', 'BEEN', 'BEFORE', 'BEHIND', 'BEING', 'BELIEVE', 'BELONG', 'BEST',
-                    'BETWEEN', 'BIG', 'BIGGER', 'BIGGEST', 'BIT', 'BOTH', 'BUDDY', 'BUT', 'BY', 'CALL', 'CALLED',
-                    'CAME', 'CAN', "CAN'T", 'CANNOT', 'CARE', 'CARING', 'CASE', 'CATCH', 'CAUGHT', 'CERTAIN',
-                    'CHANGE', 'CLOSE', 'CLOSER', 'COME', 'COMING', 'COMMON', 'CONSTANT', 'CONSTANTLY', 'COULD',
-                    'DAY', 'DAYS', 'DERIVED', 'DESCRIBE', 'DESCRIBES', 'DETERMINE', 'DETERMINES', 'DID', "DIDN'T",
-                    'DOES', "DOESN'T", 'DOING', "DON'T", 'DONE', 'DOUBT', 'DOWN', 'EACH', 'EARLIER', 'EARLY', 'ELSE',
-                    'ESPECIALLY', 'EVEN', 'EVER', 'EVERY', 'EVERYBODY', 'EVERYONE', 'EVERYTHING', 'FACT', 'FAIR',
-                    'FAR', 'FELLOW', 'FEW', 'FIND', 'FINE', 'FOR', 'FORM', 'FOUND', 'FROM', 'FULL', 'FURTHER', 'GAVE',
-                    'GETTING', 'GIVE', 'GIVEN', 'GIVING', 'GO', 'GOING', 'GONE', 'GOOD', 'GOT', 'GOTTEN', 'GREAT',
-                    'HAS', "HASN'T", 'HAVE', "HAVEN'T", 'HAVING', 'HELD', 'HERE', 'HIGH', 'HOLD', 'HOLDING', 'HOW',
-                    'IN', 'INDEED', 'INSIDE', 'INSTEAD', 'INTO', 'IS', "ISN'T", 'IT', "IT'S", 'ITS', 'JUST', 'KEEP',
-                    'KNEW', 'KNOW', 'KNOWN', 'LARGE', 'LARGER', 'LARGETS', 'LAST', 'LATE', 'LATER', 'LEAST', 'LESS',
-                    "LET'S", 'LEVEL', 'LIKES', 'LITTLE', 'LONG', 'LONGER', 'LOOK', 'LOOKED', 'LOOKING', 'LOOKS', 'LOW',
-                    'MAKE', 'MAKING', 'MANY', 'MATE', 'MAY', 'MAYBE', 'MEAN', 'MEET', 'MENTION', 'MERE', 'MIGHT',
-                    'MORE', 'MORNING', 'MOST', 'MOVE', 'MUCH', 'MUST', 'NEAR', 'NEARER', 'NEVER', 'NEXT', 'NICE',
-                    'NONE', 'NOON', 'NOONE', 'NOT', 'NOTE', 'NOTHING', 'NOW', 'OBVIOUS', 'OF', 'OFF', 'ON', 'ONCE',
-                    'ONTO', 'OPINION', 'OR', 'OTHER', 'OUR', 'OUT', 'OVER', 'OWN', 'PART', 'PARTICULAR',
-                    'PERHAPS', 'PERSON', 'PIECE', 'PLACE', 'PLEASANT', 'PLEASE', 'POPULAR', 'PREFER', 'PRETTY', 'PUT',
-                    'REAL', 'REALLY', 'RECEIVE', 'RECEIVED', 'RECENT', 'RECENTLY', 'RELATED', 'RESULT', 'RESULTING',
-                    'SAID', 'SAME', 'SAW', 'SAY', 'SAYING', 'SEE', 'SEEM', 'SEEMED', 'SEEMS', 'SEEN', 'SELDOM',
-                    'SET', 'SEVERAL', 'SHALL', 'SHORT', 'SHORTER', 'SHOULD', 'SHOW', 'SHOWS', 'SIMPLE', 'SIMPLY',
-                    'SO', 'SOME', 'SOMEONE', 'SOMETHING', 'SOMETIME', 'SOMETIMES', 'SOMEWHERE', 'SORT', 'SORTS',
-                    'SPENT', 'STILL', 'STUFF', 'SUCH', 'SUGGEST', 'SUGGESTION', 'SUPPOSE', 'SURE', 'SURELY',
-                    'SURROUNDS', 'TAKE', 'TAKEN', 'TAKING', 'TELL', 'THAN', 'THANK', 'THANKS', 'THAT', "THAT'S",
-                    'THE', 'THEIR', 'THEM', 'THEN', 'THERE', 'THEREFORE', 'THESE', 'THEY', 'THING', 'THINGS', 'THIS',
-                    'THOUGH', 'THOUGHTS', 'THOUROUGHLY', 'THROUGH', 'TINY', 'TO', 'TODAY', 'TOGETHER', 'TOLD',
-                    'TOO', 'TOTAL', 'TOTALLY', 'TOUCH', 'TRY', 'TWICE', 'UNDER', 'UNDERSTAND', 'UNDERSTOOD', 'UNTIL',
-                    'US', 'USED', 'USING', 'USUALLY', 'VARIOUS', 'VERY', 'WANT', 'WANTED', 'WANTS', 'WAS', 'WATCH',
-                    'WAYS', 'WE', "WE'RE", 'WELL', 'WENT', 'WERE', 'WHAT', "WHAT'S", 'WHATEVER', 'WHATS', 'WHEN',
-                    "WHERE'S", 'WHICH', 'WHILE', 'WHILST', 'WHO', "WHO'S", 'WHOM', 'WILL', 'WISH', 'WITH', 'WITHIN',
-                    'WONDERFUL', 'WORSE', 'WORST', 'WOULD', 'WRONG', 'YESTERDAY', 'YET']
+DEFAULT_BANWORDS = ["A", "ABILITY", "ABLE", "ABOUT", "ABSOLUTE", "ABSOLUTELY", "ACROSS", "ACTUAL", "ACTUALLY", "AFTER",
+                    "AGAIN", "AGAINST", "AGO", "AGREE", "ALL", "ALMOST", "ALONG", "ALREADY", "ALTHOUGH", "ALWAYS",
+                    "AN", "AND", "ANOTHER", "ANY", "ANYHOW", "ANYTHING", "ANYWAY", "ARE", "AREN'T", "AROUND", "AS",
+                    "AWAY", "BACK", "BAD", "BE", "BEEN", "BEFORE", "BEHIND", "BEING", "BELIEVE", "BELONG", "BEST",
+                    "BETWEEN", "BIG", "BIGGER", "BIGGEST", "BIT", "BOTH", "BUDDY", "BUT", "BY", "CALL", "CALLED",
+                    "CAME", "CAN", "CAN'T", "CANNOT", "CARE", "CARING", "CASE", "CATCH", "CAUGHT", "CERTAIN",
+                    "CHANGE", "CLOSE", "CLOSER", "COME", "COMING", "COMMON", "CONSTANT", "CONSTANTLY", "COULD",
+                    "DAY", "DAYS", "DERIVED", "DESCRIBE", "DESCRIBES", "DETERMINE", "DETERMINES", "DID", "DIDN'T",
+                    "DOES", "DOESN'T", "DOING", "DON'T", "DONE", "DOUBT", "DOWN", "EACH", "EARLIER", "EARLY", "ELSE",
+                    "ESPECIALLY", "EVEN", "EVER", "EVERY", "EVERYBODY", "EVERYONE", "EVERYTHING", "FACT", "FAIR",
+                    "FAR", "FELLOW", "FEW", "FIND", "FINE", "FOR", "FORM", "FOUND", "FROM", "FULL", "FURTHER", "GAVE",
+                    "GETTING", "GIVE", "GIVEN", "GIVING", "GO", "GOING", "GONE", "GOOD", "GOT", "GOTTEN", "GREAT",
+                    "HAS", "HASN'T", "HAVE", "HAVEN'T", "HAVING", "HELD", "HERE", "HIGH", "HOLD", "HOLDING", "HOW",
+                    "IN", "INDEED", "INSIDE", "INSTEAD", "INTO", "IS", "ISN'T", "IT", "IT'S", "ITS", "JUST", "KEEP",
+                    "KNEW", "KNOW", "KNOWN", "LARGE", "LARGER", "LARGETS", "LAST", "LATE", "LATER", "LEAST", "LESS",
+                    "LET'S", "LEVEL", "LIKES", "LITTLE", "LONG", "LONGER", "LOOK", "LOOKED", "LOOKING", "LOOKS", "LOW",
+                    "MAKE", "MAKING", "MANY", "MATE", "MAY", "MAYBE", "MEAN", "MEET", "MENTION", "MERE", "MIGHT",
+                    "MORE", "MORNING", "MOST", "MOVE", "MUCH", "MUST", "NEAR", "NEARER", "NEVER", "NEXT", "NICE",
+                    "NONE", "NOON", "NOONE", "NOT", "NOTE", "NOTHING", "NOW", "OBVIOUS", "OF", "OFF", "ON", "ONCE",
+                    "ONTO", "OPINION", "OR", "OTHER", "OUR", "OUT", "OVER", "OWN", "PART", "PARTICULAR",
+                    "PERHAPS", "PERSON", "PIECE", "PLACE", "PLEASANT", "PLEASE", "POPULAR", "PREFER", "PRETTY", "PUT",
+                    "REAL", "REALLY", "RECEIVE", "RECEIVED", "RECENT", "RECENTLY", "RELATED", "RESULT", "RESULTING",
+                    "SAID", "SAME", "SAW", "SAY", "SAYING", "SEE", "SEEM", "SEEMED", "SEEMS", "SEEN", "SELDOM",
+                    "SET", "SEVERAL", "SHALL", "SHORT", "SHORTER", "SHOULD", "SHOW", "SHOWS", "SIMPLE", "SIMPLY",
+                    "SO", "SOME", "SOMEONE", "SOMETHING", "SOMETIME", "SOMETIMES", "SOMEWHERE", "SORT", "SORTS",
+                    "SPENT", "STILL", "STUFF", "SUCH", "SUGGEST", "SUGGESTION", "SUPPOSE", "SURE", "SURELY",
+                    "SURROUNDS", "TAKE", "TAKEN", "TAKING", "TELL", "THAN", "THANK", "THANKS", "THAT", "THAT'S",
+                    "THE", "THEIR", "THEM", "THEN", "THERE", "THEREFORE", "THESE", "THEY", "THING", "THINGS", "THIS",
+                    "THOUGH", "THOUGHTS", "THOUROUGHLY", "THROUGH", "TINY", "TO", "TODAY", "TOGETHER", "TOLD",
+                    "TOO", "TOTAL", "TOTALLY", "TOUCH", "TRY", "TWICE", "UNDER", "UNDERSTAND", "UNDERSTOOD", "UNTIL",
+                    "US", "USED", "USING", "USUALLY", "VARIOUS", "VERY", "WANT", "WANTED", "WANTS", "WAS", "WATCH",
+                    "WAYS", "WE", "WE'RE", "WELL", "WENT", "WERE", "WHAT", "WHAT'S", "WHATEVER", "WHATS", "WHEN",
+                    "WHERE'S", "WHICH", "WHILE", "WHILST", "WHO", "WHO'S", "WHOM", "WILL", "WISH", "WITH", "WITHIN",
+                    "WONDERFUL", "WORSE", "WORST", "WOULD", "WRONG", "YESTERDAY", "YET"]
 
-DEFAULT_AUXWORDS = ['DISLIKE', 'HE', 'HER', 'HERS', 'HIM', 'HIS', 'I', "I'D", "I'LL", "I'M", "I'VE", 'LIKE', 'ME',
-                    'MY', 'MYSELF', 'ONE', 'SHE', 'THREE', 'TWO', 'YOU', "YOU'D", "YOU'LL", "YOU'RE", "YOU'VE", 'YOUR',
-                    'YOURSELF']
+"""
+From https://github.com/cjg/megahal :
 
-DEFAULT_SWAPWORDS = {"YOU'RE": "I'M", "YOU'D": "I'D", 'HATE': 'LOVE', 'YOUR': 'MY', "I'LL": "YOU'LL", 'NO': 'YES',
-                     'WHY': 'BECAUSE', 'YOU': 'ME', 'LOVE': 'HATE', 'I': 'YOU', 'MINE': 'YOURS', 'YOURSELF': 'MYSELF',
-                     'DISLIKE': 'LIKE', "I'M": "YOU'RE", 'ME': 'YOU', 'MYSELF': 'YOURSELF', 'LIKE': 'DISLIKE',
-                     "I'D": "YOU'D", "YOU'VE": "I'VE", 'YES': 'NO', 'MY': 'YOUR'}
+This file contains auxiliary keywords.  That is, keywords which can only
+be used to generate the output if other keywords appear in it as well.
+Most of the words in MEGAHAL.SWP are auxiliary keywords.  For instance,
+if you type "What is my name", MegaHAL should use "YOUR" and "NAME" as
+keywords, where "YOUR" is auxiliary.
+
+Basically, "YOUR" will only appear in the reply if "NAME" appears, but
+"NAME" can appear without "YOUR".  Think about it.  It makes sense.
+"""
+DEFAULT_AUXWORDS = ["DISLIKE", "HE", "HER", "HERS", "HIM", "HIS", "I", "I'D", "I'LL", "I'M", "I'VE", "LIKE", "ME",
+                    "MY", "MYSELF", "ONE", "SHE", "THREE", "TWO", "YOU", "YOU'D", "YOU'LL", "YOU'RE", "YOU'VE",
+                    "YOUR", "YOURSELF"]
+
+DEFAULT_SWAPWORDS = {"YOU'RE": "I'M", "YOU'D": "I'D", "HATE": "LOVE", "YOUR": "MY", "I'LL": "YOU'LL", "NO": "YES",
+                     "WHY": "BECAUSE", "YOU": "ME", "LOVE": "HATE", "I": "YOU", "MINE": "YOURS", "YOURSELF": "MYSELF",
+                     "DISLIKE": "LIKE", "I'M": "YOU'RE", "ME": "YOU", "MYSELF": "YOURSELF", "LIKE": "DISLIKE",
+                     "I'D": "YOU'D", "YOU'VE": "I'VE", "YES": "NO", "MY": "YOUR"}
 
 
 class Reply:
@@ -167,37 +173,41 @@ class Dictionary(list):
 
 
 class Brain(object):
-    def __init__(self, order=None, file=None, timeout=None, banwords=None):
-        self.timeout = timeout or DEFAULT_TIMEOUT
-        self.db = shelve.open(file or DEFAULT_BRAINFILE, writeback=True)
-        self.init_db(order=order, banwords=banwords)
-        self.closed = False
-
-    def init_db(self, clear=False, order=None, banwords=None):
-        if clear:
-            banwords = banwords or deepcopy(self.db["banwords"])
-            self.db.clear()
-        if self.db.setdefault('api', API_VERSION) != API_VERSION:
-            raise ValueError(
-                'This brain has an incompatible api version: %d != %d'
-                % (self.db['api'], API_VERSION)  # type: ignore[str-format]
-            )
+    def __init__(self, db, order=None, timeout=None, banwords=None, auxwords=None, swapwords=None):
         order = order or DEFAULT_ORDER
-        if self.db.setdefault('order', order) != order:
-            raise ValueError('This brain already has an order of %d' % self.db['order'])
-        self.forward = self.db.setdefault('forward', Tree())
-        self.backward = self.db.setdefault('backward', Tree())
-        self.dictionary = self.db.setdefault('dictionary', Dictionary())
-        self.error_symbol = self.dictionary.add_word(ERROR_WORD)
-        self.end_symbol = self.dictionary.add_word(END_WORD)
-        banwords = banwords or DEFAULT_BANWORDS
-        self.banwords = self.db.setdefault('banwords', Dictionary(banwords))
-        self.auxwords = self.db.setdefault('auxwords', Dictionary(DEFAULT_AUXWORDS))
-        self.swapwords = self.db.setdefault('swapwords', DEFAULT_SWAPWORDS)
+        self.timeout = timeout or DEFAULT_TIMEOUT
+        self.auxwords = auxwords or DEFAULT_AUXWORDS
+        self.banwords = banwords or DEFAULT_BANWORDS
+        self.swapwords = swapwords or DEFAULT_SWAPWORDS
+
+        self.db = db
+        self.db.add_key("dictionary", Dictionary)
+        self.db.add_key("api", str, default=API_VERSION)
+        self.db.add_key("order", int, default=order)
+        self.db.add_key("forward", Tree)
+        self.db.add_key("backward", Tree)
+
+        self.db.open()
+
+        if self.db.api != API_VERSION:
+            raise ValueError(
+                "This brain has an incompatible api version: %d != %d"
+                % (self.db.api, API_VERSION)
+            )
+        if self.db.order != order:
+            raise ValueError("This brain already has an order of %d" % self.db.order)
+
+        self.init_db()
+
+    def init_db(self, clear=False):
+        # TODO: Do 'clear'
+        self.error_symbol = self.db.dictionary.add_word(ERROR_WORD)
+        self.end_symbol = self.db.dictionary.add_word(END_WORD)
+        self.closed = False
 
     @property
     def order(self) -> int:
-        return self.db['order']
+        return self.db.order
 
     @staticmethod
     def get_words_from_phrase(phrase):
@@ -246,9 +256,9 @@ class Brain(object):
                     print(phrase, offset)
                     raise e
             if words[-1][0].isalnum():
-                words.append('.')
-            elif words[-1][-1] not in '!.?':
-                words[-1] = '.'
+                words.append(".")
+            elif words[-1][-1] not in "!.?":
+                words[-1] = "."
         return words
 
     def communicate(self, phrase, learn=True, reply=True, max_length=None, timeout=None):
@@ -287,7 +297,7 @@ class Brain(object):
                     for key in keys[i:] + keys[:i]:
                         if key not in self.auxwords:
                             try:
-                                return self.dictionary.index(key)
+                                return self.db.dictionary.index(key)
                             except ValueError:
                                 pass
                 if context.root.children:
@@ -305,7 +315,7 @@ class Brain(object):
                 symbol = 0
                 while count >= 0:
                     symbol = node.children[i].symbol
-                    word = self.dictionary[symbol]
+                    word = self.db.dictionary[symbol]
                     if word in keys and (context.used_key or word not in self.auxwords):
                         context.used_key = True
                         break
@@ -320,12 +330,12 @@ class Brain(object):
 
     def learn(self, words):
         if len(words) > self.order:
-            with self.get_context(self.forward) as context:
+            with self.get_context(self.db.forward) as context:
                 for word in words:
-                    context.update(self.dictionary.add_word(word))
-            with self.get_context(self.backward) as context:
+                    context.update(self.db.dictionary.add_word(word))
+            with self.get_context(self.db.backward) as context:
                 for word in reversed(words):
-                    context.update(self.dictionary.index(word))
+                    context.update(self.db.dictionary.index(word))
 
     def get_reply(self, words, max_length=None, timeout=None):
         replies = self.get_replies(words, max_length=max_length, timeout=timeout)
@@ -353,7 +363,7 @@ class Brain(object):
             for i in range(len(sentences), 0, -1):
                 if max_length and len("".join(["".join(s) for s in sentences[:i]]).strip()) <= max_length:
                     return [w for s in sentences[:i] for w in s]
-                return []
+            return []
 
         keywords = self.make_keywords(words)
         basetime = time()
@@ -396,17 +406,17 @@ class Brain(object):
         return []
 
     def evaluate_reply(self, keys, words):
-        state = {'num': 0, 'entropy': 0.0}
+        state = {"num": 0, "entropy": 0.0}
         if words:
             def evaluate(node, words):
                 with self.get_context(node) as context:
                     for word in words:
-                        symbol = self.dictionary.index(word)
+                        symbol = self.db.dictionary.index(word)
                         context.update(symbol)
                         if word in keys:
                             prob = 0.0
                             count = 0
-                            state['num'] += 1
+                            state["num"] += 1
                             for j in range(self.order):
                                 node = context.get(j)
                                 if node is not None:
@@ -415,22 +425,22 @@ class Brain(object):
                                         prob += float(child.count) / node.usage
                                     count += 1
                             if count:
-                                state['entropy'] -= math.log(prob / count)
+                                state["entropy"] -= math.log(prob / count)
 
-            evaluate(self.forward, words)
-            evaluate(self.backward, reversed(words))
+            evaluate(self.db.forward, words)
+            evaluate(self.db.backward, reversed(words))
 
-            if state['num'] >= 8:
-                state['entropy'] /= math.sqrt(state['num'] - 1)
-            if state['num'] >= 16:
-                state['entropy'] /= state['num']
-        return state['entropy']
+            if state["num"] >= 8:
+                state["entropy"] /= math.sqrt(state["num"] - 1)
+            if state["num"] >= 16:
+                state["entropy"] /= state["num"]
+        return state["entropy"]
 
     def generate_replywords(self, keys=None):
         if keys is None:
             keys = []
         replies: "List[str]" = []
-        with self.get_context(self.forward) as context:
+        with self.get_context(self.db.forward) as context:
             start = True
             while True:
                 if start:
@@ -440,17 +450,17 @@ class Brain(object):
                     symbol = context.babble(keys, replies)
                 if symbol in (self.error_symbol, self.end_symbol):
                     break
-                replies.append(self.dictionary[symbol])
+                replies.append(self.db.dictionary[symbol])
                 context.update(symbol)
-        with self.get_context(self.backward) as context:
+        with self.get_context(self.db.backward) as context:
             if replies:
                 for i in range(min([(len(replies) - 1), self.order]), -1, -1):
-                    context.update(self.dictionary.index(replies[i]))
+                    context.update(self.db.dictionary.index(replies[i]))
             while True:
                 symbol = context.babble(keys, replies)
                 if symbol in (self.error_symbol, self.end_symbol):
                     break
-                replies.insert(0, self.dictionary[symbol])
+                replies.insert(0, self.db.dictionary[symbol])
                 context.update(symbol)
 
         return replies
@@ -462,7 +472,7 @@ class Brain(object):
                 word = self.swapwords[word]
             except KeyError:
                 pass
-            if (self.dictionary.find_word(word) != self.error_symbol and word[0].isalnum() and
+            if (self.db.dictionary.find_word(word) != self.error_symbol and word[0].isalnum() and
                     word not in self.banwords and word not in self.auxwords and word not in keys and
                     len(word) > 1):
                 keys.append(word)
@@ -473,25 +483,18 @@ class Brain(object):
                     word = self.swapwords[word]
                 except KeyError:
                     pass
-                if (self.dictionary.find_word(word) != self.error_symbol and word[0].isalnum() and
+                if (self.db.dictionary.find_word(word) != self.error_symbol and word[0].isalnum() and
                         word in self.auxwords and word not in keys):
                     keys.append(word)
 
         return keys
-
-    def add_key(self, keys, word):
-        # Never used?!
-        if (len(word) > 1 and self.dictionary.find_word(word) != self.error_symbol and
-            self.banwords.find_word(word) == self.error_symbol and
-                self.auxwords.find_word(word) == self.error_symbol):
-            keys.add_word(word)
 
     def sync(self):
         self.db.sync()
 
     def close(self):
         if not self.closed:
-            print('Closing database')
+            print("Closing database")
             self.db.close()
             self.closed = True
 
@@ -503,71 +506,86 @@ class Brain(object):
 
 
 class MegaHAL(object):
-    def __init__(self, order=None, brainfile=None, timeout=None, banwords=None, banwordfile=None, max_length=None):
+    def __init__(
+            self, order=None, db=None, timeout=None, banwords=None, auxwords=None,
+            swapwords=None, max_length=None):
         """
         Args:
+            db (database.BaseDatabase, optional): Database object to use.
+                Default: ShelveDatabase.
             banwords (list of str, optional): List of common words (in
                 that MegaHAL should ignore when learning and replying.
                 Defaults to DEFAULT_BANWORDS. Pro tip: do a web search for the
                 most commonly used words in your language and use the top ~300
                 of those.
+            timeout (float, optional): Max number of seconds to generate each
+                reply.
+            max_length (int, optional): Maximum number of characters in a
+                reply.
         """
+        from twitterhal import database
+
+        if db is None:
+            db = database.ShelveDatabase(db_path="megahal.brain")
+        assert isinstance(db, database.BaseDatabase)
+
         self.max_length = max_length
-        if banwordfile and not banwords:
-            banwords = []
-            with open(banwordfile, "r") as f:
-                for line in f:
-                    banwords.extend([w.strip().upper() for w in line.split(",")])
-        elif banwords:
+        if isinstance(banwords, list):
             banwords = [w.upper() for w in banwords]
-        self.__brain = Brain(order, brainfile, timeout=timeout, banwords=banwords)
+        if isinstance(auxwords, list):
+            auxwords = [w.upper() for w in auxwords]
+        if isinstance(swapwords, dict):
+            swapwords = {k.upper(): v.upper() for k, v in swapwords.items()}
+        self.brain = Brain(
+            db, order=order, timeout=timeout, banwords=banwords, auxwords=auxwords,
+            swapwords=swapwords)
 
     @property
     def brainsize(self):
         """Subtract by 2 because dictionary contains <ERROR> & <FIN> symbols"""
-        return len(self.__brain.dictionary) - 2
+        return len(self.brain.dictionary) - 2
 
     @property
     def banwords(self):
         """This is a list of words which cannot be used as keywords"""
-        return self.__brain.banwords
+        return self.brain.banwords
 
     @property
     def auxwords(self):
         """This is a list of words which can be used as keywords only in order to supplement other keywords"""
-        return self.__brain.auxwords
+        return self.brain.auxwords
 
     @property
     def swapwords(self):
         """The word on the left is changed to the word on the right when used as a keyword"""
-        return self.__brain.swapwords
+        return self.brain.swapwords
 
     def train(self, file):
         """Train the brain with textfile, each line is a phrase"""
         line_count = 0
         percent = 0
         line_number = 1
-        with open(file, 'r') as fp:
+        with open(file, "r") as fp:
             for line in fp:
                 line_count += 1
-        with open(file, 'r') as fp:
+        with open(file, "r") as fp:
             for line in fp:
                 if int((line_number / line_count) * 100) != percent:
                     percent = int((line_number / line_count) * 100)
-                    print('{} %'.format(percent))
+                    print("{} %".format(percent))
                 # Remove quotation marks
-                line = line.replace('"', '')
+                line = line.replace("'", "")
                 # Remove superfluous spaces
-                line = re.sub(r'\s{2,}', ' ', line)
+                line = re.sub(r"\s{2,}", " ", line)
                 # Remove whitespace at beginning and end
                 line = line.strip()
                 # Remove dash (and following spaces) in beginning
-                line = re.sub(r'^-\s*', '', line)
+                line = re.sub(r"^-\s*", "", line)
                 # Exclude empty lines, comment lines, and lines without
                 # "word" characters. Also some special rules
                 if line \
-                        and not line.startswith('#') \
-                        and re.search(r'\w', line) \
+                        and not line.startswith("#") \
+                        and re.search(r"\w", line) \
                         and "kapitlet" not in line.lower() \
                         and "psaltaren" not in line.lower():
                     self.learn(line)
@@ -575,22 +593,23 @@ class MegaHAL(object):
 
     def learn(self, phrase):
         """Learn from phrase"""
-        self.__brain.communicate(phrase, reply=False)
+        self.brain.communicate(phrase, reply=False)
 
     def get_reply(self, phrase, max_length=None, timeout=None):
         """Get a reply based on the phrase"""
-        return self.__brain.communicate(phrase, max_length=max_length or self.max_length, timeout=timeout)
+        return self.brain.communicate(phrase, max_length=max_length or self.max_length, timeout=timeout)
 
     def get_reply_nolearn(self, phrase, max_length=None, timeout=None):
         """Get a reply without updating the database"""
-        return self.__brain.communicate(phrase, learn=False, max_length=max_length or self.max_length, timeout=timeout)
+        return self.brain.communicate(
+            phrase, learn=False, max_length=max_length or self.max_length, timeout=timeout)
 
     def interact(self, timeout=None):
         """Have a friendly chat session.. ^D to exit"""
         print("Go ahead and chat! ^D to exit.")
         while True:
             try:
-                phrase = input('>>> ')
+                phrase = input(">>> ")
             except EOFError:
                 break
             if phrase:
@@ -598,11 +617,11 @@ class MegaHAL(object):
 
     def sync(self):
         """Flush any changes to disk"""
-        self.__brain.sync()
+        self.brain.sync()
 
     def close(self):
         """Close database"""
-        self.__brain.close()
+        self.brain.close()
 
     def clear(self):
-        self.__brain.init_db(clear=True)
+        self.brain.init_db(clear=True)
