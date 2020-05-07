@@ -508,7 +508,7 @@ class Brain(object):
 class MegaHAL(object):
     def __init__(
             self, order=None, db=None, timeout=None, banwords=None, auxwords=None,
-            swapwords=None, max_length=None):
+            swapwords=None, max_length=None, **kwargs):
         """
         Args:
             db (database.BaseDatabase, optional): Database object to use.
