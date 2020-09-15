@@ -23,10 +23,10 @@ example of usage:
 
 $ python3 pymegahal.py -b brain3.brn
 Transcription has began
-> > wow, I'm impressed
+  > wow, I'm impressed
 That is a relief.
-> > taking the exit
+  > taking the exit
 Why are you soooo slooooooooooow
-> > Closing transcript
+  > Closing transcript
 Closing database
 
