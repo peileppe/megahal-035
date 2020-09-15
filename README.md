@@ -1,7 +1,8 @@
 To install:
 
-    python setup.py build
-    sudo python setup.py install
+    pip3 install python-Levenshtein
+    python3 setup.py build
+    sudo python3 setup.py install
 
 To run:
 
