@@ -1,3 +1,4 @@
+*.brn
 *.pyc
 *.pyc
 /dist/

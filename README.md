@@ -1,8 +1,7 @@
 To install:
-    
-    pip3 install python-Levenshtein
-    python3 setup.py build
-    sudo python3 setup.py install
+
+    python setup.py build
+    sudo python setup.py install
 
 To run:
 
@@ -17,4 +16,5 @@ As a lib:
     print megahal.get_reply('hey, wazzap')
     megahal.sync()  # flush any changes to disc
     megahal.close()  # flush changes and close
+
 
