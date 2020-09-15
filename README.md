@@ -19,3 +19,14 @@ As a lib:
     megahal.close()  # flush changes and close
 
 
+example of usage:
+
+$ python3 pymegahal.py -b brain3.brn
+Transcription has began
+> wow, I'm impressed
+That is a relief.
+> exit
+Why are you soooo slooooooooooow
+> Closing transcript
+Closing database
+
